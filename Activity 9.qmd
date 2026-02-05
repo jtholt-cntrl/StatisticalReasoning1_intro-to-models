@@ -1,0 +1,233 @@
+---
+title: "Activity 9: Statistical reasoning 1: intro to models"
+author: "Joshua Holt and Jacob Chung"
+format: pdf
+editor: visual
+---
+
+# 1. Fiddler crabs
+
+```{r}
+library(brms) # for statistics
+library(tidyverse)
+library(ggeffects) # for the prediction plot
+library(lterdatasampler) # for built-in datasets
+```
+
+```{r}
+head(pie_crab)
+```
+
+## 1.1 Plot data, pick the model
+
+```{r}
+pie_crab %>% 
+  ggplot(aes(x = latitude, y = size)) +
+  geom_point() +
+  # Make the y-axis include 0
+  ylim(0, NA)
+```
+
+### Q1.1) I would say that size does increase with latitude. We are not very confident in this interpretation, due to potential bias in sampling.
+
+### Q1.2)
+
+```{r}
+pie_crab %>% 
+  ggplot(aes(x = latitude, y = size)) +
+  geom_point() +
+  # Make the y-axis include 0
+  ylim(0, NA) +
+  geom_smooth()+
+  theme_classic()
+
+```
+
+## 1.2 Fit linear regression with brms
+
+```{r}
+# latitude model
+m.crab.lat <- 
+  brm(data = pie_crab, # Give the model the pie_crab data
+      # Choose a gaussian (normal) distribution
+      family = gaussian,
+      # Specify the model here. 
+      size ~ latitude,
+      # Here's where you specify parameters for executing the Markov chains
+      # We're using similar to the defaults, except we set cores to 4 so the analysis runs faster than the default of 1
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      # Setting the "seed" determines which random numbers will get sampled.
+      # In this case, it makes the randomness of the Markov chain runs reproducible 
+      # (so that both of us get the exact same results when running the model)
+      seed = 4,
+      # Save the fitted model object as output - helpful for reloading in the output later
+      file = "output/m.crab.lat")
+```
+
+### Q1.3) The iter tells the computer the number of total iterations per chain (including warmup; defaults to 2000).
+
+## 1.3 Assess model
+
+```{r}
+summary(m.crab.lat)
+```
+
+```{r}
+plot(m.crab.lat) # show posteriors and chains
+```
+
+## 1.4 Interpret model
+
+```{r}
+summary(m.crab.lat)
+```
+
+```{r}
+as_draws_df(m.crab.lat)  %>%  # extract the posterior samples from the model estimate
+  select(b_latitude)  %>%  # pull out the latitude samples from all 4 chains. we'll get a warning that we can ignore.
+  summarize(p_slope_lessthanorequalto_zero = sum(b_latitude <= 0)/length(b_latitude))
+```
+
+## 1.5 Plot model on the data
+
+```{r}
+# compatibility interval. the shows uncertainty in the average response.
+confm.crab.lat <- predict_response(m.crab.lat)
+plot(confm.crab.lat, show_data = TRUE)
+```
+
+```{r}
+# prediction interval. this shows uncertainty in the data around the average response.
+confm.crab.lat <- predict_response(m.crab.lat, interval = 'prediction')
+plot(confm.crab.lat, show_data = TRUE)
+```
+
+## 1.6 Repeat with new variable: water temp sd
+
+### Q1.4) We predict that higher variability will be observed in smaller crabs, with the larger crabs showing lower variability. This is due to the expectation that larger crabs will handle water temperature variability the best.
+
+### Q1.5)
+
+```{r}
+pie_crab %>% 
+  ggplot(aes(x = water_temp_sd, y = size)) +
+  geom_point() +
+  # Make the y-axis include 0
+  ylim(0, NA) +
+  geom_smooth()+
+  theme_classic()
+```
+
+### Q1.6) It does not look like size changes with the sd of water temperature. We are moderately confident with this assessment due to the lack of slope in the regression line.
+
+### Q1.7)
+
+```{r}
+# water temp sd model
+m.crab.watersd <- 
+  brm(data = pie_crab, # Give the model the pie_crab data
+      # Choose a gaussian (normal) distribution
+      family = gaussian,
+      # Specify the model here. 
+      size ~ water_temp_sd,
+      # Here's where you specify parameters for executing the Markov chains
+      # We're using similar to the defaults, except we set cores to 4 so the analysis runs faster than the default of 1
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      # Setting the "seed" determines which random numbers will get sampled.
+      # In this case, it makes the randomness of the Markov chain runs reproducible 
+      # (so that both of us get the exact same results when running the model)
+      seed = 4,
+      # Save the fitted model object as output - helpful for reloading in the output later
+      file = "output/m.crab.watersd")
+```
+
+### Q1.8) Our model ran correctly because our Rhat is 1 and based on our MCMC graphs, our models all came to the same conclusion.
+
+```{r}
+# show posteriors and chains
+plot(m.crab.watersd) 
+
+# show summary, including rhat
+summary(m.crab.watersd)
+```
+
+### Q1.9) 
+
+#### 1. We found that standard deviation has a miniscule effect on body size. With every 1 standard deviation in water temperature, we see an increase of 0.1 mm of carapace width. 
+
+#### 2. The effect is not reasonably differentthan 0 because our confidence interval includes 0 (-0.23 to 0.42).
+
+# 2. Back to Pikas!
+
+```{r}
+head(nwt_pikas)
+nwt_pikas_doy <- nwt_pikas %>% 
+  # Add a new column called day_of_year
+  # yday extracts the day of year from the date column
+  mutate(day_of_year = yday(date)) %>% 
+  # relocate the day_of_year column after the date column
+  relocate(day_of_year, .after = date)
+
+head(nwt_pikas_doy)
+```
+
+## Q2.1) How does stress vary based on the day of the year?
+
+## Q2.2) We expect pika stress to increase as the year progresses. We think think this because as the year progresses, temperature increases making the pikas more stressed.
+
+## Q2.3)
+
+```{r}
+nwt_pikas_doy |>
+  ggplot(aes(x = day_of_year, y = concentration_pg_g))+
+  geom_point()+
+  theme_classic()+
+  geom_smooth()
+```
+
+## Q2.4)
+
+```{r}
+# Pika stress over year model
+pika.s.day <- 
+  brm(data = nwt_pikas_doy, 
+      # Choose a gaussian (normal) distribution
+      family = gaussian,
+      # Specify the model here. 
+      concentration_pg_g ~ day_of_year,
+      # Here's where you specify parameters for executing the Markov chains
+      # We're using similar to the defaults, except we set cores to 4 so the analysis runs faster than the default of 1
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      # Setting the "seed" determines which random numbers will get sampled.
+      # In this case, it makes the randomness of the Markov chain runs reproducible 
+      # (so that both of us get the exact same results when running the model)
+      seed = 4,
+      # Save the fitted model object as output - helpful for reloading in the output later
+      file = "output/pika.s.day")
+```
+
+## Q2.5) We believe the model ran correctly because our Rhat is equal to 1 and our MCMC all overlap.
+
+```{r}
+# show posteriors and chains
+plot(pika.s.day) 
+
+# show summary, including rhat
+summary(pika.s.day)
+```
+
+## Q2.6)
+
+### 1. For every 1 day increase, there is a -59.17 picogram per gram (parts per trillion) concentration change in Pika stress.
+
+### 2. Our effect is reasonably different than 0 because our confidence interval doesn't include 0 (-78.41, -39.66).
+
+## Q2.7) Prediction Interval
+
+```{r}
+# prediction interval. this shows uncertainty in the data around the average response.
+pred.pika.day <- predict_response(pika.s.day, interval = 'prediction')
+plot(pred.pika.day, show_data = TRUE)
+```
+
+## Q2.8) We found a decrease of (-)59.17 picogram per gram of stress concentration per one additional day of the year. Since our 95% credible intervals does not include 0 (-78.41, -39.66), this suggests that given our model, Pika stress decreases as the year progresses.
